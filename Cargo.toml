@@ -1,0 +1,6 @@
+[package]
+name = "tic-tac-rust"
+version = "0.1.0"
+authors = ["Dillon Hicks <dillon@dillonhicks.io>"]
+
+[dependencies]
