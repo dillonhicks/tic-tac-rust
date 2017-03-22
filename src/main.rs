@@ -1,23 +1,18 @@
-#![feature(exclusive_range_pattern)]
 use std::io::prelude::*;
 use std::str;
-use std::io::{self, Read};
+use std::io;
 use std::option::Option;
 use std::fmt::Display;
 use std::fmt;
 
 
-#[derive(Debug)]
-#[derive(Copy)]
-#[derive(Clone)]
-#[derive(PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 enum Player {
-    None,
     X,
     O
 }
 
-type Board = [Player; 9];
+type Board = [Option<Player>; 9];
 
 
 #[derive(Debug)]
@@ -26,25 +21,22 @@ struct Game {
     board: Board,
 }
 
-type Point = [usize; 2];
-
 
 impl Game {
 
-    fn format_player(&self, player: Player, f: &mut fmt::Formatter) {
+    fn format_player(&self, player: Option<Player>, f: &mut fmt::Formatter) {
         match player {
-            Player::None => write!(f, " "),
-            Player::X => write!(f, "X"),
-            Player::O => write!(f, "O")
-        };
-
+            None => write!(f, " "),
+            Some(Player::X) => write!(f, "X"),
+            Some(Player::O) => write!(f, "O")
+        }.ok();
     }
 
     fn format_row(&self, idx: usize, f: &mut fmt::Formatter) {
         self.format_player(self.board[idx + 0], f);
-        write!(f, " | ");
+        write!(f, " | ").ok();
         self.format_player(self.board[idx + 1], f);
-        write!(f, " | ");
+        write!(f, " | ").ok();
         self.format_player(self.board[idx + 2], f);
     }
 
@@ -52,22 +44,21 @@ impl Game {
         for idx in 0..3 {
             self.format_row(idx * 3, f);
             if idx != 2 {
-                write!(f, "\n----------\n");
+                write!(f, "\n----------\n").ok();
             }
         }
     }
 
     fn do_move(&mut self, idx: usize) {
-        if self.board[idx] != Player::None {
+        if self.board[idx].is_some() {
             println!("Not a valid move!");
             return;
         }
 
-        self.board[idx] = self.current_player;
-        match self.current_player {
-            Player::X => self.current_player = Player::O,
-            Player::O => self.current_player = Player::X,
-            Player::None => panic!("inconceivable!")
+        self.board[idx] = Some(self.current_player);
+        self.current_player = match self.current_player {
+            Player::X => Player::O,
+            Player::O => Player::X,
         }
     }
 
@@ -78,54 +69,42 @@ impl Game {
     }
 
     fn check_condition(&self, cond: [usize; 3]) -> Option<Player> {
-        let pieces: Vec<Player> = cond.iter().map(|c| self.board[*c]).collect();
-        let xs: usize = pieces.iter().map(|p| if *p == Player::X {1} else {0}).sum();
-        let os: usize = pieces.iter().map(|p| if *p == Player::O {1} else {0}).sum();
-
-        if xs == pieces.len() {
-            return Some(Player::X)
-        } else if os == pieces.len() {
-            return Some(Player::O)
+        if self.board[cond[0]] == self.board[cond[1]] && self.board[cond[0]] == self.board[cond[2]] {
+            self.board[cond[0]]
+        } else {
+            None
         }
-
-        return None
     }
 
-    fn check_win_condition(&self) -> Option<Player> {
-        let conditions: Vec<[usize; 3]> = vec![
+    fn check_win_condition(&self) -> Option<Option<Player>> {
+        let conditions = [
             [0, 1, 2], [3, 4, 5], [6, 7, 8],
             [0, 3, 6], [1, 4, 7], [2, 5, 8],
             [0, 4, 8], [2, 4, 6]];
 
         let mut wins = conditions
-            .into_iter()
+            .iter()
+            .cloned()
             .map(|c| self.check_condition(c))
             .filter(|p| p.is_some())
-            .map(|s| s.unwrap())
-            .collect::<Vec<Player>>();
+            .collect::<Vec<Option<Player>>>();
 
-        let ns: usize = self.board.iter().map(|p| if *p != Player::None {1} else {0}).sum();
-        if ns == self.board.len() {
-            wins.push(Player::None);
+        let is_full = self.board.iter().all(|p| p.is_some());
+        if is_full {
+            wins.push(None);
         }
 
-
-        wins.reverse();
-        return wins.pop();
+        wins.into_iter().nth(0)
     }
 
 
-    fn process_turn(&mut self, input: String) {
+    fn process_turn(&mut self, input: &str) {
 
         println!();
-        let c = match input.as_str().chars().nth(0) {
-            Some(n) => n.to_digit(10),
-            None => None,
-        };
-
+        let c = input.chars().nth(0).and_then(|n| n.to_digit(10));
 
         match c {
-            Some(n @ 1..10)  => self.do_move((n - 1) as usize),
+            Some(n) if n > 0 => self.do_move((n - 1) as usize),
             _ => println!("'{}' is not a valid move!\n", input)
         }
 
@@ -136,11 +115,12 @@ impl Game {
     fn run(&mut self) {
         let stdin = io::stdin();
         println!("Turn {:?}", self.current_player);
-        for line in stdin.lock().lines() {
-            self.process_turn(line.unwrap());
+        for line in stdin.lock().lines().map(|line| line.unwrap()) {
+            self.process_turn(&line);
 
             match self.check_win_condition() {
-                Some(p) => {println!("{:?} is the winner!", p); return},
+                Some(Some(p)) => {println!("{:?} is the winner!", p); return},
+                Some(None) => {println!("Cat's game!"); return},
                 None => continue
             }
         }
@@ -162,7 +142,7 @@ fn main() {
     loop {
         let mut game = Game{
             current_player: Player::X,
-            board: [Player::None; 9],
+            board: [None; 9],
         };
 
         println!("New Game!");
